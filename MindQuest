@@ -1,0 +1,127 @@
+import { Configuration, OpenAIApi } from "openai";
+import { ConversationChain } from "langchain/chains";
+import { BufferMemory } from "langchain/memory";
+import {
+  ChatPromptTemplate,
+  HumanMessagePromptTemplate,
+  AIMessagePromptTemplate,
+  MessagesPlaceholder,
+} from "langchain/prompts";
+
+// Set up OpenAI API key from environment variables
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openaiApi = new OpenAIApi(configuration);
+
+// Initialize the LangChain chat model and memory
+const prompt = ChatPromptTemplate.fromPromptMessages([
+  AIMessagePromptTemplate.fromTemplate(
+    `You are a compassionate AI that asks open-ended questions to understand the user's mental well-being, emotions, and habits. Based on their responses, assess signs of stress, anxiety, or depression, but avoid diagnosing. Keep the tone warm, friendly, and conversational, offering support and suggesting professional help if needed.`
+  ),
+  new MessagesPlaceholder("history"),
+  HumanMessagePromptTemplate.fromTemplate("{input}"),
+]);
+
+const chain = new ConversationChain({
+  llm: openaiApi,
+  memory: new BufferMemory({
+    returnMessages: true,
+    memoryKey: "history",
+  }),
+  prompt,
+});
+
+export default async function handler(req, res) {
+  if (req.method === "POST") {
+    const { message } = req.body;
+
+    // Call OpenAI's GPT model
+    const response = await openaiApi.createChatCompletion({
+      model: "gpt-4o-mini", 
+      messages: [
+        {
+          role: "system",
+          content: `You are a compassionate AI that asks open-ended questions to understand the user's mental well-being, emotions, and habits. Based on their responses, assess signs of stress, anxiety, or depression, but avoid diagnosing. Keep the tone warm, friendly, and conversational, offering support and suggesting professional help if needed.`,
+        },
+        { role: "user", content: message },
+      ],
+      max_tokens: 150,
+    });
+
+    // Get the AI's response
+    const aiResponse = response.data.choices[0].message.content;
+
+    res.status(200).json({ output: aiResponse });
+  } else {
+    res.status(405).json({ message: "Method Not Allowed" });
+  }
+}
+
+// pages/index.js (React component for front-end)
+
+import { useEffect, useState } from "react";
+
+export default function Home() {
+  const [message, setMessage] = useState("");
+  const [chatLog, setChatLog] = useState([]);
+
+  const sendMessage = async () => {
+    if (!message.trim()) return;
+
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+
+    const data = await res.json();
+
+    setChatLog((prev) => [
+      ...prev,
+      { type: "user", text: message },
+      { type: "bot", text: data.output },
+    ]);
+    setMessage("");
+  };
+
+  // AI starts the conversation on first load
+  useEffect(() => {
+    const startConversation = async () => {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "" }), // Empty message triggers AI start
+      });
+
+      const data = await res.json();
+      setChatLog([{ type: "bot", text: data.output }]);
+    };
+
+    startConversation();
+  }, []);
+
+  return (
+    <div style={{ maxWidth: "600px", margin: "0 auto", padding: "20px" }}>
+      <h2>Compassionate AI Chatbot</h2>
+      <div style={{ minHeight: "300px", padding: "10px", background: "#f1f1f1", borderRadius: "10px" }}>
+        {chatLog.map((msg, i) => (
+          <div key={i} style={{ marginBottom: "10px" }}>
+            <strong>{msg.type === "user" ? "You" : "Bot"}:</strong> {msg.text}
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
+        <input
+          type="text"
+          placeholder="Type your response..."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          style={{ flex: 1, padding: "10px" }}
+        />
+        <button onClick={sendMessage}>Send</button>
+      </div>
+    </div>
+  );
+}
