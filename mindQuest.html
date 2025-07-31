@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MindQuest</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 30px auto; background: #f5f5f5; }
+  #chat-box { background: white; height: 400px; border: 1px solid #ccc; padding: 10px; overflow-y: auto; }
+  .message { margin-bottom: 10px; }
+  .user { font-weight: bold; color: #3f51b5; }
+  .bot { font-weight: bold; color: #5c6bc0; }
+  #chat-form { margin-top: 10px; display: flex; gap: 10px; }
+  #user-input { flex: 1; padding: 10px; font-size: 16px; }
+  button { padding: 10px 20px; background: #5c6bc0; color: white; border: none; cursor: pointer; }
+  button:hover { background: #3f51b5; }
+</style>
+</head>
+<body>
+
+<h2>MindQuest</h2>
+<div id="chat-box"></div>
+
+<form id="chat-form">
+  <input type="text" id="user-input" placeholder="Type a message..." autocomplete="off" required />
+  <button type="submit">Send</button>
+</form>
+
+<script>
+  const chatBox = document.getElementById('chat-box');
+  const chatForm = document.getElementById('chat-form');
+  const userInput = document.getElementById('user-input');
+
+  // === Paste your OpenAI API key here (unsafe) ===
+  const OPENAI_API_KEY = 'sk-...YOUR-API-KEY-HERE...';
+
+  function addMessage(sender, text) {
+    const div = document.createElement('div');
+    div.classList.add('message');
+    div.innerHTML = `<span class="${sender.toLowerCase()}">${sender}:</span> ${text}`;
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  async function getOpenAIResponse(message) {
+    const url = 'https://api.openai.com/v1/chat/completions';
+    const body = {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are a caring and empathetic AI that listens to users’ feelings and asks open-ended questions to understand their mental well-being. Always respond warmly and encourage seeking professional help if serious distress is detected, without giving medical diagnoses." },
+        { role: "user", content: message }
+      ],
+      max_tokens: 150
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer YOUR OPEN AI API KEY`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+  }
+
+  chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = userInput.value.trim();
+    if (!msg) return;
+
+    addMessage('You', msg);
+    userInput.value = '';
+
+    addMessage('Bot', '...');
+
+    try {
+      const reply = await getOpenAIResponse(msg);
+      // Remove the "...thinking..." placeholder before adding actual reply
+      chatBox.lastChild.remove();
+      addMessage('Bot', reply);
+    } catch (err) {
+      chatBox.lastChild.remove();
+      addMessage('Bot', 'Sorry, something went wrong.');
+      console.error(err);
+    }
+  });
+
+  // Initial greeting
+  addMessage('Bot', 'Hello! How are you feeling today?');
+</script>
+
+</body>
+</html>
